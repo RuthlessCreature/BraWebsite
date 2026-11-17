@@ -17,6 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build all seven language pages
+        run: node scripts/build-locales.mjs
+
+      - name: Verify all seven locales and SEO
+        run: node scripts/verify-locales.mjs
+
       - name: Verify website assets and JavaScript
         run: node scripts/verify-site.mjs
 
@@ -45,8 +51,19 @@ jobs:
             if [ "$CODE" = "200" ]; then
               curl -fsSL --max-time 15 https://bra.pomerol.trade/ | grep -q 'POMEROL' &&
               curl -fsSI --max-time 15 https://bra.pomerol.trade/images/hero-lifestyle.webp &&
-              echo 'PASS: public HTTPS, Pomerol page, hero image' &&
-              exit 0
+              echo 'PASS: public HTTPS, Pomerol page, hero image'
+              ALL_READY=true
+              for LANG in en zh-cn zh-tw ja ru es pt; do
+                if ! curl -fsSL --max-time 15 "https://bra.pomerol.trade/$LANG/" | grep -q "BRA_LOCALE=\"$LANG\""; then
+                  echo "Language page not yet available: $LANG"
+                  ALL_READY=false
+                  break
+                fi
+              done
+              if [ "$ALL_READY" = true ]; then
+                echo 'PASS: all seven public-language pages'
+                exit 0
+              fi
             fi
             echo "Waiting for public route (attempt $n/18; HTTP $CODE)"
             sleep 10
