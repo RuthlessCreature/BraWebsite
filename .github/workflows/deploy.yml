@@ -3,29 +3,53 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: bra-pomerol-trade-production
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check Cloudflare credentials
+
+      - name: Verify website assets and JavaScript
+        run: node scripts/verify-site.mjs
+
+      - name: Require Cloudflare deployment credentials
         env:
-          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -n "$TOKEN" ] && [ -n "$ACCOUNT" ]; then
-            echo "CF_READY=true" >> "$GITHUB_ENV"
-          else
-            echo "CF_READY=false" >> "$GITHUB_ENV"
-            echo "::warning::Cloudflare secrets missing; deployment skipped. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository Actions secrets."
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT_ID" ]; then
+            echo "::error::Cloudflare deployment BLOCKED: configure both CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository Settings > Secrets and variables > Actions."
+            exit 1
           fi
-      - name: Deploy to Cloudflare Workers
-        if: env.CF_READY == 'true'
+
+      - name: Deploy to Cloudflare Workers and bind custom domain
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4'
           command: deploy --config wrangler.jsonc
+
+      - name: Verify website and hero image via public HTTPS
+        run: |
+          for n in $(seq 1 18); do
+            CODE=$(curl -sS -L --max-time 15 -o /dev/null -w '%{http_code}' https://bra.pomerol.trade/ || true)
+            if [ "$CODE" = "200" ]; then
+              curl -fsSL --max-time 15 https://bra.pomerol.trade/ | grep -q 'POMEROL' &&
+              curl -fsSI --max-time 15 https://bra.pomerol.trade/images/hero-lifestyle.webp &&
+              echo 'PASS: public HTTPS, Pomerol page, hero image' &&
+              exit 0
+            fi
+            echo "Waiting for public route (attempt $n/18; HTTP $CODE)"
+            sleep 10
+          done
+          echo "::error::Cloudflare deployment command returned but public HTTPS did not pass validation."
+          exit 1
