@@ -1,0 +1,14 @@
+{
+  "name": "bra-pomerol-trade",
+  "compatibility_date": "2026-11-17",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [
+    {
+      "pattern": "bra.pomerol.trade",
+      "custom_domain": true
+    }
+  ]
+}

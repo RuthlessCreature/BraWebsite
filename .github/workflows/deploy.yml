@@ -1,0 +1,31 @@
+name: Deploy Pomerol Intimates to Cloudflare Workers
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Cloudflare credentials
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$ACCOUNT" ]; then
+            echo "CF_READY=true" >> "$GITHUB_ENV"
+          else
+            echo "CF_READY=false" >> "$GITHUB_ENV"
+            echo "::warning::Cloudflare secrets missing; deployment skipped. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository Actions secrets."
+          fi
+      - name: Deploy to Cloudflare Workers
+        if: env.CF_READY == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.0.0'
+          command: deploy --config wrangler.jsonc

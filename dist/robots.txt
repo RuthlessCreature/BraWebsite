@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://bra.pomerol.trade/sitemap.xml
